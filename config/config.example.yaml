@@ -1,0 +1,45 @@
+database:
+  host: localhost
+  port: 5432
+  
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+grpcAuthServer:
+  host: 0.0.0.0
+  port: 50051
+
+jwt:
+  secret_key: "your-super-secret-jwt-key-change-in-production"
+  expiration: "24h"
+
+verification:
+  secret_key: "your-super-secret-verification-key-change-in-production"
+  expiration: "24h"
+
+grpc:
+  db_service:
+    host: "localhost"
+    port: 50051
+  tls_enabled: false
+
+logger:
+  level: "info"
+  development: true
+  encoding: "console"
+  outputPaths: ["stdout"]
+  errorOutputPaths: ["stderr"]
+  encoderConfig:
+    messageKey: "message"
+    levelKey: "level"
+    timeKey: "timestamp"
+    nameKey: "logger"
+    callerKey: "caller"
+    functionKey: "func"
+    stacktraceKey: "stacktrace"
+    lineEnding: "\n"
+    levelEncoder: "lowercase"
+    timeEncoder: "iso8601"
+    durationEncoder: "string"
+    callerEncoder: "short"
