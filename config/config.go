@@ -42,6 +42,12 @@ type GrpcConfig struct {
 	Port int    `yaml:"port"`
 }
 
+// DbManagerConfig - конфигурация gRPC клиента для DBManager
+type DbManagerConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
 // Config - основная конфигурация приложения
 type Config struct {
 	Server       ServerConfig       `yaml:"server"`
@@ -49,6 +55,7 @@ type Config struct {
 	Verification VerificationConfig `yaml:"verification"`
 	Logger       LoggerConfig       `yaml:"logger"`
 	Grpc         GrpcConfig         `yaml:"grpc"`
+	DbManager    DbManagerConfig    `yaml:"dbmanager"`
 }
 
 func LoadConfig(filename string) (*Config, error) {
@@ -65,4 +72,4 @@ func LoadConfig(filename string) (*Config, error) {
 		return nil, fmt.Errorf("could not decode config file: %v", err)
 	}
 	return &config, nil
-} 
+}

@@ -93,4 +93,4 @@ func (c *AuthTestClient) ValidateToken(ctx context.Context, token string) (*pb.A
 
 	fmt.Printf("Token valid, user: %v\n", resp.User)
 	return resp.User, nil
-} 
+}

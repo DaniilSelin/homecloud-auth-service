@@ -15,6 +15,8 @@ import (
 	"homecloud-auth-service/internal/interfaces"
 	"homecloud-auth-service/internal/security"
 	pb "homecloud-auth-service/internal/transport/grpc/protos"
+
+	"github.com/google/uuid"
 )
 
 type AuthServer struct {
@@ -28,31 +30,31 @@ type AuthServer struct {
 func NewAuthServer(ctx *context.Context, userService interfaces.UserService, sec *security.Security, cfg *config.GrpcConfig) *AuthServer {
 	return &AuthServer{
 		userService: userService,
-		sec:        sec,
-		cfg:        cfg,
-		contxt:     ctx,
+		sec:         sec,
+		cfg:         cfg,
+		contxt:      ctx,
 	}
 }
 
 func (s *AuthServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
-	user, err := s.userService.Register(ctx, req.Email, req.Username, req.Password)
+	user, _, err := s.userService.Register(ctx, req.Email, req.Username, req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("registration failed: %v", err)
 	}
 
 	return &pb.RegisterResponse{
 		User: &pb.AuthUser{
-			Id:             user.ID.String(),
-			Email:          user.Email,
-			Username:       user.Username,
-			IsActive:       user.IsActive,
+			Id:              user.ID.String(),
+			Email:           user.Email,
+			Username:        user.Username,
+			IsActive:        user.IsActive,
 			IsEmailVerified: user.IsEmailVerified,
-			StorageQuota:   user.StorageQuota,
-			UsedSpace:      user.UsedSpace,
-			Role:           user.Role,
-			IsAdmin:        user.IsAdmin,
-			CreatedAt:      user.CreatedAt.String(),
-			UpdatedAt:      user.UpdatedAt.String(),
+			StorageQuota:    user.StorageQuota,
+			UsedSpace:       user.UsedSpace,
+			Role:            user.Role,
+			IsAdmin:         user.IsAdmin,
+			CreatedAt:       user.CreatedAt.String(),
+			UpdatedAt:       user.UpdatedAt.String(),
 		},
 	}, nil
 }
@@ -65,17 +67,17 @@ func (s *AuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 
 	return &pb.LoginResponse{
 		User: &pb.AuthUser{
-			Id:             user.ID.String(),
-			Email:          user.Email,
-			Username:       user.Username,
-			IsActive:       user.IsActive,
+			Id:              user.ID.String(),
+			Email:           user.Email,
+			Username:        user.Username,
+			IsActive:        user.IsActive,
 			IsEmailVerified: user.IsEmailVerified,
-			StorageQuota:   user.StorageQuota,
-			UsedSpace:      user.UsedSpace,
-			Role:           user.Role,
-			IsAdmin:        user.IsAdmin,
-			CreatedAt:      user.CreatedAt.String(),
-			UpdatedAt:      user.UpdatedAt.String(),
+			StorageQuota:    user.StorageQuota,
+			UsedSpace:       user.UsedSpace,
+			Role:            user.Role,
+			IsAdmin:         user.IsAdmin,
+			CreatedAt:       user.CreatedAt.String(),
+			UpdatedAt:       user.UpdatedAt.String(),
 		},
 		Token: token,
 	}, nil
@@ -89,17 +91,17 @@ func (s *AuthServer) GetUserProfile(ctx context.Context, req *pb.GetUserProfileR
 
 	return &pb.GetUserProfileResponse{
 		User: &pb.AuthUser{
-			Id:             user.ID.String(),
-			Email:          user.Email,
-			Username:       user.Username,
-			IsActive:       user.IsActive,
+			Id:              user.ID.String(),
+			Email:           user.Email,
+			Username:        user.Username,
+			IsActive:        user.IsActive,
 			IsEmailVerified: user.IsEmailVerified,
-			StorageQuota:   user.StorageQuota,
-			UsedSpace:      user.UsedSpace,
-			Role:           user.Role,
-			IsAdmin:        user.IsAdmin,
-			CreatedAt:      user.CreatedAt.String(),
-			UpdatedAt:      user.UpdatedAt.String(),
+			StorageQuota:    user.StorageQuota,
+			UsedSpace:       user.UsedSpace,
+			Role:            user.Role,
+			IsAdmin:         user.IsAdmin,
+			CreatedAt:       user.CreatedAt.String(),
+			UpdatedAt:       user.UpdatedAt.String(),
 		},
 	}, nil
 }
@@ -116,7 +118,7 @@ func (s *AuthServer) UpdateUserProfile(ctx context.Context, req *pb.UpdateUserPr
 		newPassword = &req.NewPassword
 	}
 
-	err := s.userService.UpdateUserProfile(ctx, parseUUID(req.UserId), username, oldPassword, newPassword)
+	err := s.userService.UpdateProfile(ctx, parseUUID(req.UserId), username, oldPassword, newPassword)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update user profile: %v", err)
 	}
@@ -143,37 +145,21 @@ func (s *AuthServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.Log
 }
 
 func (s *AuthServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
-	user, err := s.sec.ValidateToken(ctx, req.Token)
+	claims, err := s.sec.ValidateToken(req.Token)
 	if err != nil {
 		return nil, fmt.Errorf("token validation failed: %v", err)
 	}
 
 	return &pb.ValidateTokenResponse{
 		User: &pb.AuthUser{
-			Id:             user.ID.String(),
-			Email:          user.Email,
-			Username:       user.Username,
-			IsActive:       user.IsActive,
-			IsEmailVerified: user.IsEmailVerified,
-			StorageQuota:   user.StorageQuota,
-			UsedSpace:      user.UsedSpace,
-			Role:           user.Role,
-			IsAdmin:        user.IsAdmin,
-			CreatedAt:      user.CreatedAt.String(),
-			UpdatedAt:      user.UpdatedAt.String(),
+			Id: claims.UserID.String(),
 		},
 	}, nil
 }
 
-func (s *AuthServer) RefreshToken(ctx context.Context, req *pb.RefreshTokenRequest) (*pb.RefreshTokenResponse, error) {
-	token, err := s.userService.RefreshToken(ctx, req.Token)
-	if err != nil {
-		return nil, fmt.Errorf("token refresh failed: %v", err)
-	}
-
-	return &pb.RefreshTokenResponse{
-		Token: token,
-	}, nil
+func parseUUID(id string) uuid.UUID {
+	u, _ := uuid.Parse(id)
+	return u
 }
 
 func (a *AuthServer) StartAuthServer() error {
@@ -203,8 +189,4 @@ func (a *AuthServer) StartAuthServer() error {
 	grpcServer.GracefulStop()
 	fmt.Printf("gRPC auth server stopped on %s\n", port)
 	return nil
-}
-
-func parseUUID(id string) string {
-	return id // For now, just pass through the string ID
 }

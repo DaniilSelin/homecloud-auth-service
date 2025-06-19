@@ -34,7 +34,6 @@ func NewDBServiceClient(host string, port int) (DBServiceClient, error) {
 }
 
 func (c *DBServiceClientImpl) Connect() error {
-	// Already connected in constructor
 	return nil
 }
 
@@ -46,113 +45,138 @@ func (c *DBServiceClientImpl) Close() error {
 }
 
 func (c *DBServiceClientImpl) CreateUser(ctx context.Context, user *models.User) (uuid.UUID, error) {
-	// Для тестирования возвращаем заглушку
-	return uuid.New(), nil
+	req := &pb.User{
+		Id:                  user.ID.String(),
+		Email:               user.Email,
+		Username:            user.Username,
+		PasswordHash:        user.PasswordHash,
+		IsActive:            user.IsActive,
+		IsEmailVerified:     user.IsEmailVerified,
+		Role:                user.Role,
+		StorageQuota:        user.StorageQuota,
+		UsedSpace:           user.UsedSpace,
+		CreatedAt:           timestamppb.New(user.CreatedAt),
+		UpdatedAt:           timestamppb.New(user.UpdatedAt),
+		FailedLoginAttempts: int32(user.FailedLoginAttempts),
+	}
+	if user.LockedUntil != nil {
+		req.LockedUntil = timestamppb.New(*user.LockedUntil)
+	}
+	if user.LastLoginAt != nil {
+		req.LastLogin = timestamppb.New(*user.LastLoginAt)
+	}
+	resp, err := c.client.CreateUser(ctx, req)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return uuid.Parse(resp.Id)
 }
 
 func (c *DBServiceClientImpl) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	// Заглушка для тестирования
-	return &models.User{
-		ID:                 id,
-		Email:             "test@example.com",
-		Username:          "testuser",
-		PasswordHash:      "$2a$12$hashedpassword",
-		IsActive:          true,
-		IsEmailVerified:   false,
-		Role:              "user",
-		StorageQuota:      10737418240, // 10GB
-		UsedSpace:         0,
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
-		FailedLoginAttempts: 0,
-		LockedUntil:       nil,
-		LastLoginAt:       nil,
-	}, nil
+	req := &pb.UserID{Id: id.String()}
+	resp, err := c.client.GetUserByID(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return protoToUser(resp)
 }
 
 func (c *DBServiceClientImpl) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	// Заглушка для тестирования
-	return &models.User{
-		ID:                 uuid.New(),
-		Email:             email,
-		Username:          "testuser",
-		PasswordHash:      "$2a$12$hashedpassword",
-		IsActive:          true,
-		IsEmailVerified:   false,
-		Role:              "user",
-		StorageQuota:      10737418240, // 10GB
-		UsedSpace:         0,
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
-		FailedLoginAttempts: 0,
-		LockedUntil:       nil,
-		LastLoginAt:       nil,
-	}, nil
+	req := &pb.EmailRequest{Email: email}
+	resp, err := c.client.GetUserByEmail(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return protoToUser(resp)
 }
 
 func (c *DBServiceClientImpl) UpdateUser(ctx context.Context, user *models.User) error {
-	return nil // Заглушка успешного обновления
+	req := &pb.User{
+		Id:                  user.ID.String(),
+		Email:               user.Email,
+		Username:            user.Username,
+		PasswordHash:        user.PasswordHash,
+		IsActive:            user.IsActive,
+		IsEmailVerified:     user.IsEmailVerified,
+		Role:                user.Role,
+		StorageQuota:        user.StorageQuota,
+		UsedSpace:           user.UsedSpace,
+		CreatedAt:           timestamppb.New(user.CreatedAt),
+		UpdatedAt:           timestamppb.New(user.UpdatedAt),
+		FailedLoginAttempts: int32(user.FailedLoginAttempts),
+	}
+	if user.LockedUntil != nil {
+		req.LockedUntil = timestamppb.New(*user.LockedUntil)
+	}
+	if user.LastLoginAt != nil {
+		req.LastLogin = timestamppb.New(*user.LastLoginAt)
+	}
+	_, err := c.client.UpdateUser(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) UpdatePassword(ctx context.Context, id uuid.UUID, passwordHash string) error {
-	return nil // Заглушка успешного обновления
+	req := &pb.UpdatePasswordRequest{Id: id.String(), PasswordHash: passwordHash}
+	_, err := c.client.UpdatePassword(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) UpdateUsername(ctx context.Context, id uuid.UUID, username string) error {
-	return nil // Заглушка успешного обновления
+	req := &pb.UpdateUsernameRequest{Id: id.String(), Username: username}
+	_, err := c.client.UpdateUsername(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) UpdateEmailVerification(ctx context.Context, id uuid.UUID, isVerified bool) error {
-	return nil // Заглушка успешного обновления
+	req := &pb.UpdateEmailVerificationRequest{Id: id.String(), IsVerified: isVerified}
+	_, err := c.client.UpdateEmailVerification(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
-	return nil // Заглушка успешного обновления
+	req := &pb.UserID{Id: id.String()}
+	_, err := c.client.UpdateLastLogin(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) UpdateFailedLoginAttempts(ctx context.Context, id uuid.UUID, attempts int) error {
-	return nil // Заглушка успешного обновления
+	req := &pb.UpdateFailedLoginAttemptsRequest{Id: id.String(), Attempts: int32(attempts)}
+	_, err := c.client.UpdateFailedLoginAttempts(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) UpdateLockedUntil(ctx context.Context, id uuid.UUID, lockedUntil *time.Time) error {
-	return nil // Заглушка успешного обновления
+	var ts *timestamppb.Timestamp
+	if lockedUntil != nil {
+		ts = timestamppb.New(*lockedUntil)
+	}
+	req := &pb.UpdateLockedUntilRequest{Id: id.String(), LockedUntil: ts}
+	_, err := c.client.UpdateLockedUntil(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) UpdateStorageUsage(ctx context.Context, id uuid.UUID, usedSpace int64) error {
-	return nil // Заглушка успешного обновления
+	req := &pb.UpdateStorageUsageRequest{Id: id.String(), UsedSpace: usedSpace}
+	_, err := c.client.UpdateStorageUsage(ctx, req)
+	return err
 }
 
 func (c *DBServiceClientImpl) CheckEmailExists(ctx context.Context, email string) (bool, error) {
-	return false, nil // Заглушка - email не существует
+	req := &pb.EmailRequest{Email: email}
+	resp, err := c.client.CheckEmailExists(ctx, req)
+	if err != nil {
+		return false, err
+	}
+	return resp.Exists, nil
 }
 
 func (c *DBServiceClientImpl) CheckUsernameExists(ctx context.Context, username string) (bool, error) {
-	return false, nil // Заглушка - username не существует
-}
-
-// Вспомогательные функции для конвертации между protobuf и моделями
-func userToProto(u *models.User) *pb.User {
-	user := &pb.User{
-		Id:                u.ID.String(),
-		Email:            u.Email,
-		Username:         u.Username,
-		PasswordHash:     u.PasswordHash,
-		IsActive:         u.IsActive,
-		IsEmailVerified:  u.IsEmailVerified,
-		Role:             u.Role,
-		StorageQuota:     u.StorageQuota,
-		UsedSpace:        u.UsedSpace,
-		CreatedAt:        timestamppb.New(u.CreatedAt),
-		UpdatedAt:        timestamppb.New(u.UpdatedAt),
-		FailedLoginAttempts: int32(u.FailedLoginAttempts),
+	req := &pb.UsernameRequest{Username: username}
+	resp, err := c.client.CheckUsernameExists(ctx, req)
+	if err != nil {
+		return false, err
 	}
-	if u.LockedUntil != nil {
-		user.LockedUntil = timestamppb.New(*u.LockedUntil)
-	}
-	if u.LastLoginAt != nil {
-		user.LastLogin = timestamppb.New(*u.LastLoginAt)
-	}
-	return user
+	return resp.Exists, nil
 }
 
 func protoToUser(p *pb.User) (*models.User, error) {
@@ -161,17 +185,17 @@ func protoToUser(p *pb.User) (*models.User, error) {
 		return nil, fmt.Errorf("invalid UUID: %v", err)
 	}
 	user := &models.User{
-		ID:                 id,
-		Email:             p.Email,
-		Username:          p.Username,
-		PasswordHash:      p.PasswordHash,
-		IsActive:          p.IsActive,
-		IsEmailVerified:   p.IsEmailVerified,
-		Role:              p.Role,
-		StorageQuota:      p.StorageQuota,
-		UsedSpace:         p.UsedSpace,
-		CreatedAt:         p.CreatedAt.AsTime(),
-		UpdatedAt:         p.UpdatedAt.AsTime(),
+		ID:                  id,
+		Email:               p.Email,
+		Username:            p.Username,
+		PasswordHash:        p.PasswordHash,
+		IsActive:            p.IsActive,
+		IsEmailVerified:     p.IsEmailVerified,
+		Role:                p.Role,
+		StorageQuota:        p.StorageQuota,
+		UsedSpace:           p.UsedSpace,
+		CreatedAt:           p.CreatedAt.AsTime(),
+		UpdatedAt:           p.UpdatedAt.AsTime(),
 		FailedLoginAttempts: int(p.FailedLoginAttempts),
 	}
 	if p.LockedUntil != nil {
@@ -183,4 +207,4 @@ func protoToUser(p *pb.User) (*models.User, error) {
 		user.LastLoginAt = &lastLogin
 	}
 	return user, nil
-} 
+}

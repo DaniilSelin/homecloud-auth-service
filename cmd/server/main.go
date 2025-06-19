@@ -9,14 +9,16 @@ import (
 	"os/signal"
 	"time"
 
-	"go.uber.org/zap"
 	"homecloud-auth-service/config"
 	"homecloud-auth-service/internal/logger"
 	"homecloud-auth-service/internal/repository"
 	"homecloud-auth-service/internal/security"
 	"homecloud-auth-service/internal/service"
 	"homecloud-auth-service/internal/transport/grpc/authServer"
+	"homecloud-auth-service/internal/transport/grpc/dbClient"
 	"homecloud-auth-service/internal/transport/http/api"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -24,7 +26,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	srv, grpcSrv, logBase, err := run(ctx, os.Stdout, os.Args)
+	srv, logBase, err := run(ctx, os.Stdout, os.Args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
@@ -36,33 +38,35 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
-	// Gracefully stop both servers
+	// Gracefully stop HTTP server
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logBase.Error(ctx, "HTTP server shutdown failed", zap.Error(err))
 	}
-	if err := grpcSrv.Stop(); err != nil {
-		logBase.Error(ctx, "gRPC server shutdown failed", zap.Error(err))
-	}
-	
 	logBase.Info(ctx, "Servers exited gracefully")
 }
 
-func run(ctx context.Context, w io.Writer, args []string) (*http.Server, authServer.AuthServiceServer, *logger.Logger, error) {
+func run(ctx context.Context, w io.Writer, args []string) (*http.Server, *logger.Logger, error) {
 	// Конфиг и логгер
 	cfg, err := config.LoadConfig("config/config.local.yaml")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	logBase, err := logger.New(cfg)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	ctx = logger.CtxWWithLogger(ctx, logBase)
 
-	// Создаем репозиторий (заглушка для gRPC)
-	userRepo := repository.NewUserRepository()
+	fmt.Printf("DBMANAGER CONNECT: %s:%d\n", cfg.DbManager.Host, cfg.DbManager.Port)
+	// Создаём gRPC dbClient
+	dbClient, err := dbClient.NewDBServiceClient(cfg.DbManager.Host, cfg.DbManager.Port)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create dbClient: %w", err)
+	}
+	// Создаём репозиторий
+	userRepo := repository.NewUserRepository(dbClient)
 
-	// Создаем security
+	// Создаём security
 	securityService := security.NewSecurity(
 		cfg.Jwt.SecretKey,
 		cfg.Jwt.Expiration,
@@ -70,18 +74,18 @@ func run(ctx context.Context, w io.Writer, args []string) (*http.Server, authSer
 		cfg.Verification.Expiration,
 	)
 
-	// Создаем сервис пользователей
+	// Создаём сервис пользователей
 	userService := service.NewUserService(userRepo, securityService)
 
-	// Создаем gRPC сервер
-	grpcSrv := authServer.NewAuthServiceServer(userService, securityService, logBase, cfg.Grpc.Port)
+	// Создаём gRPC сервер (фоново, ошибки логируем, но не блокируем HTTP)
+	grpcSrv := authServer.NewAuthServer(&ctx, userService, securityService, &cfg.Grpc)
 	go func() {
-		if err := grpcSrv.Start(); err != nil {
+		if err := grpcSrv.StartAuthServer(); err != nil {
 			logBase.Error(ctx, "Failed to start gRPC server", zap.Error(err))
 		}
 	}()
 
-	// Создаем HTTP хэндлер и роутер
+	// Создаём HTTP хэндлер и роутер
 	handler := api.NewHandler(userService)
 	router := api.SetupRoutes(handler)
 
@@ -99,5 +103,5 @@ func run(ctx context.Context, w io.Writer, args []string) (*http.Server, authSer
 		}
 	}()
 
-	return srv, grpcSrv, logBase, nil
+	return srv, logBase, nil
 }
