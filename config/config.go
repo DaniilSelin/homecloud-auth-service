@@ -42,6 +42,12 @@ type GrpcConfig struct {
 	Port int    `yaml:"port"`
 }
 
+// FileServiceConfig - конфигурация gRPC клиента для файлового сервиса
+type FileServiceConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
 // DbManagerConfig - конфигурация gRPC клиента для DBManager
 type DbManagerConfig struct {
 	Host string `yaml:"host"`
@@ -55,6 +61,7 @@ type Config struct {
 	Verification VerificationConfig `yaml:"verification"`
 	Logger       LoggerConfig       `yaml:"logger"`
 	Grpc         GrpcConfig         `yaml:"grpc"`
+	FileService  FileServiceConfig  `yaml:"file_service"`
 	DbManager    DbManagerConfig    `yaml:"dbmanager"`
 }
 

@@ -6,9 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"homecloud-auth-service/internal/interfaces"
 	"homecloud-auth-service/internal/models"
+	"homecloud-auth-service/internal/transport/grpc/fileClient"
+
+	"github.com/google/uuid"
 )
 
 // Использованные ошибки -
@@ -23,21 +25,23 @@ import (
 // ErrEmailAlreadyExists - email уже существует
 
 type UserService struct {
-	repo     interfaces.UserRepository
-	security interfaces.Security
+	repo        interfaces.UserRepository
+	security    interfaces.Security
+	fileService fileClient.FileServiceClient
 }
 
-func NewUserService(repo interfaces.UserRepository, security interfaces.Security) *UserService {
+func NewUserService(repo interfaces.UserRepository, security interfaces.Security, fileService fileClient.FileServiceClient) *UserService {
 	return &UserService{
-		repo:     repo,
-		security: security,
+		repo:        repo,
+		security:    security,
+		fileService: fileService,
 	}
 }
 
 // Регистрация нового пользователя
 func (s *UserService) Register(ctx context.Context, email, username, password string) (*models.User, string, error) {
 	fmt.Printf("DEBUG: Register called with email: %s, username: %s\n", email, username)
-	
+
 	// Валидация входных данных
 	if err := s.validateRegistrationData(email, username, password); err != nil {
 		fmt.Printf("DEBUG: Validation failed: %v\n", err)
@@ -90,6 +94,21 @@ func (s *UserService) Register(ctx context.Context, email, username, password st
 		return nil, "", fmt.Errorf("failed to create user: %w", err)
 	}
 
+	// Создание домашней директории для пользователя
+	if s.fileService != nil {
+		success, message, directoryPath, err := s.fileService.CreateUserDirectory(ctx, userID.String(), username)
+		if err != nil {
+			fmt.Printf("WARNING: Failed to create user directory: %v\n", err)
+			// Не прерываем регистрацию, если не удалось создать директорию
+		} else if success {
+			fmt.Printf("DEBUG: User directory created successfully: %s\n", directoryPath)
+		} else {
+			fmt.Printf("WARNING: File service returned failure: %s\n", message)
+		}
+	} else {
+		fmt.Printf("DEBUG: File service not available, skipping directory creation\n")
+	}
+
 	// Генерация JWT токена
 	token, err := s.security.GenerateToken(userID)
 	if err != nil {
@@ -104,7 +123,7 @@ func (s *UserService) Register(ctx context.Context, email, username, password st
 // Аутентификация пользователя
 func (s *UserService) Login(ctx context.Context, email, password string) (*models.User, string, error) {
 	fmt.Printf("DEBUG: Login called with email: %s\n", email)
-	
+
 	// Получение пользователя по email
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"homecloud-auth-service/internal/service"
 	"homecloud-auth-service/internal/transport/grpc/authServer"
 	"homecloud-auth-service/internal/transport/grpc/dbClient"
+	"homecloud-auth-service/internal/transport/grpc/fileClient"
 	"homecloud-auth-service/internal/transport/http/api"
 
 	"go.uber.org/zap"
@@ -66,6 +67,16 @@ func run(ctx context.Context, w io.Writer, args []string) (*http.Server, *logger
 	// Создаём репозиторий
 	userRepo := repository.NewUserRepository(dbClient)
 
+	// Создаём gRPC клиент для файлового сервиса
+	fmt.Printf("FILE SERVICE CONNECT: %s:%d\n", cfg.FileService.Host, cfg.FileService.Port)
+	fileServiceClient, err := fileClient.NewFileServiceClient(cfg.FileService.Host, cfg.FileService.Port)
+	if err != nil {
+		logBase.Info(ctx, "Failed to create file service client, continuing without file service", zap.Error(err))
+		fileServiceClient = nil
+	} else {
+		logBase.Info(ctx, "File service client created successfully")
+	}
+
 	// Создаём security
 	securityService := security.NewSecurity(
 		cfg.Jwt.SecretKey,
@@ -75,7 +86,7 @@ func run(ctx context.Context, w io.Writer, args []string) (*http.Server, *logger
 	)
 
 	// Создаём сервис пользователей
-	userService := service.NewUserService(userRepo, securityService)
+	userService := service.NewUserService(userRepo, securityService, fileServiceClient)
 
 	// Создаём gRPC сервер (фоново, ошибки логируем, но не блокируем HTTP)
 	grpcSrv := authServer.NewAuthServer(&ctx, userService, securityService, &cfg.Grpc)

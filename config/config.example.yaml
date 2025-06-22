@@ -29,6 +29,12 @@ dbmanager:
   host: "127.0.0.1"
   port: 50051
 
+# gRPC клиент для файлового сервиса
+# (используется для создания домашних директорий пользователей)
+file_service:
+  host: "127.0.0.1"
+  port: 50053
+
 logger:
   level: "info"
   development: true
