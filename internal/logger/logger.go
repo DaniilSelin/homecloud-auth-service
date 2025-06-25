@@ -3,10 +3,6 @@ package logger
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"bytes"
-	"time"
-	"encoding/json"
 
 	"homecloud-auth-service/config"
 
@@ -52,15 +48,6 @@ func (l *Logger) Info(ctx context.Context, msg string, fields ...zap.Field) {
 	}	
 
 	l.l.Info(msg, fields...)
-
-	go func() {
-        logData := map[string]interface{}{
-            "level":   "error",
-            "message": msg,
-            "fields":  fieldsToMap(fields),
-        }
-        sendLog(logData)
-    }()
 }
 
 func (l *Logger) Debug(ctx context.Context, msg string, fields ...zap.Field) {
@@ -77,42 +64,4 @@ func (l *Logger) Error(ctx context.Context, msg string, fields ...zap.Field) {
 	}	
 
 	l.l.Error(msg, fields...)
-
-	go func() {
-        logData := map[string]interface{}{
-            "level":   "error",
-            "message": msg,
-            "fields":  fieldsToMap(fields),
-        }
-        sendLog(logData)
-    }()
-}
-
-func fieldsToMap(fields []zap.Field) map[string]interface{} {
-    result := make(map[string]interface{})
-    for _, field := range fields {
-        result[field.Key] = field.Interface
-    }
-    return result
-}
-
-func sendLog(data map[string]interface{}) {
-    jsonData, err := json.Marshal(data)
-    if err != nil {
-        return
-    }
-    
-    req, err := http.NewRequest("POST", "http://localhost:8085/logcatcher", bytes.NewBuffer(jsonData))
-    if err != nil {
-        return
-    }
-    req.Header.Set("Content-Type", "application/json")
-    
-    // Используем http.Client с таймаутом, но не ждем ответ
-    client := &http.Client{
-        Timeout: 5 * time.Second,
-    }
-    
-    // игнорируем ответ
-    go client.Do(req)
 }

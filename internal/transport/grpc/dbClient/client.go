@@ -19,17 +19,23 @@ type DBServiceClientImpl struct {
 	conn   *grpc.ClientConn
 }
 
-func NewDBServiceClient(host string, port int) (DBServiceClient, error) {
+// NewDBServiceClient создает новый клиент для взаимодействия с сервисом БД
+func NewDBServiceClient(host string, port int) (*DBServiceClientImpl, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
+	fmt.Printf("Connecting to DB Manager at %s...\n", addr)
+
 	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to gRPC server: %v", err)
+		fmt.Printf("Failed to connect to DB Manager at %s: %v\n", addr, err)
+		return nil, fmt.Errorf("failed to connect to db manager: %w", err)
 	}
 
 	client := pb.NewDBServiceClient(conn)
+	fmt.Printf("Successfully connected to DB Manager at %s\n", addr)
+
 	return &DBServiceClientImpl{
-		client: client,
 		conn:   conn,
+		client: client,
 	}, nil
 }
 

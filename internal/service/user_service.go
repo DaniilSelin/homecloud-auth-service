@@ -89,24 +89,31 @@ func (s *UserService) Register(ctx context.Context, email, username, password st
 		UpdatedAt:       now,
 	}
 
-	userID, err := s.repo.CreateUser(ctx, user)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create user: %w", err)
+	// Создание домашней директории для пользователя (обязательно)
+	if s.fileService == nil {
+		return nil, "", fmt.Errorf("file service is not available - cannot create user directory")
 	}
 
-	// Создание домашней директории для пользователя
-	if s.fileService != nil {
-		success, message, directoryPath, err := s.fileService.CreateUserDirectory(ctx, userID.String(), username)
-		if err != nil {
-			fmt.Printf("WARNING: Failed to create user directory: %v\n", err)
-			// Не прерываем регистрацию, если не удалось создать директорию
-		} else if success {
-			fmt.Printf("DEBUG: User directory created successfully: %s\n", directoryPath)
-		} else {
-			fmt.Printf("WARNING: File service returned failure: %s\n", message)
-		}
-	} else {
-		fmt.Printf("DEBUG: File service not available, skipping directory creation\n")
+	// Сначала создаем папку пользователя
+	success, message, directoryPath, err := s.fileService.CreateUserDirectory(ctx, user.ID.String(), username)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to create user directory: %v\n", err)
+		return nil, "", fmt.Errorf("failed to create user directory: %w", err)
+	}
+
+	if !success {
+		fmt.Printf("ERROR: File service returned failure: %s\n", message)
+		return nil, "", fmt.Errorf("failed to create user directory: %s", message)
+	}
+
+	fmt.Printf("DEBUG: User directory created successfully: %s\n", directoryPath)
+
+	// Теперь создаем пользователя в базе данных
+	userID, err := s.repo.CreateUser(ctx, user)
+	if err != nil {
+		fmt.Printf("ERROR: Failed to create user in database after directory creation: %v\n", err)
+		// TODO: Здесь можно добавить логику удаления созданной папки при неудаче создания пользователя
+		return nil, "", fmt.Errorf("failed to create user: %w", err)
 	}
 
 	// Генерация JWT токена

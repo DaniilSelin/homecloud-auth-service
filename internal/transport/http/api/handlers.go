@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/gorilla/mux"
-	"github.com/google/uuid"
 	"homecloud-auth-service/internal/interfaces"
 	"homecloud-auth-service/internal/models"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 )
 
 type Handler struct {
@@ -27,11 +28,11 @@ func extractToken(r *http.Request) (string, error) {
 	if authHeader == "" {
 		return "", http.ErrNotSupported
 	}
-	
+
 	if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
 		return "", http.ErrNotSupported
 	}
-	
+
 	return authHeader[7:], nil
 }
 
@@ -48,25 +49,25 @@ func getUserFromContext(r *http.Request) (*models.User, error) {
 // POST /api/v1/auth/register
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterRequest
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
+
 	user, _, err := h.userService.Register(r.Context(), req.Email, req.Username, req.Password)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	response := models.RegisterResponse{
 		ID:        user.ID,
 		Email:     user.Email,
 		Username:  user.Username,
 		CreatedAt: user.CreatedAt,
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
@@ -76,18 +77,18 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 // POST /api/v1/auth/login
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginRequest
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
+
 	user, token, err := h.userService.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	
+
 	response := models.LoginResponse{
 		Token: token,
 		User: &models.UserInfo{
@@ -97,7 +98,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			Role:     user.Role,
 		},
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -110,7 +111,7 @@ func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	response := models.ProfileResponse{
 		ID:              user.ID,
 		Email:           user.Email,
@@ -121,7 +122,7 @@ func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		StorageQuota:    user.StorageQuota,
 		UsedSpace:       user.UsedSpace,
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -134,13 +135,13 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Authorization header required", http.StatusBadRequest)
 		return
 	}
-	
+
 	err = h.userService.Logout(r.Context(), token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -153,7 +154,7 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	
+
 	// Извлечение ID из URL
 	vars := mux.Vars(r)
 	userIDStr, ok := vars["id"]
@@ -161,31 +162,31 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "User ID is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
 		http.Error(w, "Invalid user ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Проверка, что пользователь обновляет свой профиль
 	if currentUser.ID != userID {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	
+
 	var req models.UpdateProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
+
 	err = h.userService.UpdateProfile(r.Context(), userID, req.Username, req.OldPassword, req.NewPassword)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -197,13 +198,13 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Verification token is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	err := h.userService.VerifyEmail(r.Context(), token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -215,15 +216,26 @@ func (h *Handler) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Authorization header required", http.StatusUnauthorized)
 			return
 		}
-		
+
 		user, err := h.userService.ValidateToken(r.Context(), token)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
-		
+
 		// Добавляем пользователя в контекст
 		ctx := context.WithValue(r.Context(), "user", user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
-} 
+}
+
+// Health check endpoint
+// GET /health
+func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"service": "homecloud-auth-service",
+	})
+}

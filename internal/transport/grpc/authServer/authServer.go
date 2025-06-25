@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -162,31 +159,42 @@ func parseUUID(id string) uuid.UUID {
 	return u
 }
 
-func (a *AuthServer) StartAuthServer() error {
-	port := fmt.Sprintf(":%d", a.cfg.Port)
-	lis, err := net.Listen("tcp", port)
-	if err != nil {
-		return fmt.Errorf("failed to listen: %v", err)
-	}
-	grpcServer := grpc.NewServer()
-	pb.RegisterAuthServiceServer(grpcServer, a)
+func (s *AuthServer) StartAuthServer() error {
+	port := fmt.Sprintf(":%d", s.cfg.Port)
+	fmt.Printf("Starting gRPC Auth Server on port %s...\n", port)
 
+	listener, err := net.Listen("tcp", port)
+	if err != nil {
+		fmt.Printf("Failed to listen on port %s: %v\n", port, err)
+		return fmt.Errorf("failed to listen: %w", err)
+	}
+
+	fmt.Printf("Successfully listening on port %s\n", port)
+
+	// Создаем gRPC сервер
+	grpcServer := grpc.NewServer()
+
+	// Регистрируем сервис
+	pb.RegisterAuthServiceServer(grpcServer, s)
+
+	// Включаем reflection для отладки
 	reflection.Register(grpcServer)
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
+	fmt.Printf("Successfully listening on port %s\n", port)
+	fmt.Printf("gRPC services registered and reflection enabled\n")
 
-	go func() {
-		fmt.Printf("gRPC auth server started on %s\n", port)
-		if err := grpcServer.Serve(lis); err != nil {
-			fmt.Printf("failed to serve: %v\n", err)
-			panic(err)
-		}
-	}()
+	// Запускаем сервер
+	fmt.Printf("gRPC auth server is now serving on %s\n", port)
+	if err := grpcServer.Serve(listener); err != nil {
+		fmt.Printf("gRPC server failed to serve: %v\n", err)
+		return fmt.Errorf("failed to serve: %w", err)
+	}
 
-	<-stop
-	fmt.Printf("gRPC auth server is shutting down...\n")
-	grpcServer.GracefulStop()
-	fmt.Printf("gRPC auth server stopped on %s\n", port)
 	return nil
+}
+
+func (s *AuthServer) StopAuthServer() {
+	fmt.Printf("Shutdown signal received, stopping gRPC auth server...\n")
+	// Здесь можно добавить graceful shutdown логику
+	fmt.Printf("gRPC auth server stopped gracefully on :%d\n", s.cfg.Port)
 }

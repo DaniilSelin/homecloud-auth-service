@@ -21,13 +21,16 @@ type FileServiceClientImpl struct {
 // NewFileServiceClient создает новый клиент файлового сервиса
 func NewFileServiceClient(host string, port int) (*FileServiceClientImpl, error) {
 	address := fmt.Sprintf("%s:%d", host, port)
+	fmt.Printf("Connecting to File Service at %s...\n", address)
 
 	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		fmt.Printf("Failed to connect to File Service at %s: %v\n", address, err)
 		return nil, fmt.Errorf("failed to connect to file service: %w", err)
 	}
 
 	client := protos.NewFileServiceClient(conn)
+	fmt.Printf("Successfully connected to File Service at %s\n", address)
 
 	return &FileServiceClientImpl{
 		conn:   conn,

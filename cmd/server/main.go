@@ -58,37 +58,62 @@ func run(ctx context.Context, w io.Writer, args []string) (*http.Server, *logger
 	}
 	ctx = logger.CtxWWithLogger(ctx, logBase)
 
-	fmt.Printf("DBMANAGER CONNECT: %s:%d\n", cfg.DbManager.Host, cfg.DbManager.Port)
 	// Создаём gRPC dbClient
+	fmt.Printf("Creating DB Manager client connection to %s:%d...\n", cfg.DbManager.Host, cfg.DbManager.Port)
 	dbClient, err := dbClient.NewDBServiceClient(cfg.DbManager.Host, cfg.DbManager.Port)
 	if err != nil {
+		fmt.Printf("Failed to create DB Manager client: %v\n", err)
 		return nil, nil, fmt.Errorf("failed to create dbClient: %w", err)
 	}
+	fmt.Printf("DB Manager client created successfully\n")
+
 	// Создаём репозиторий
 	userRepo := repository.NewUserRepository(dbClient)
+	fmt.Printf("User repository initialized\n")
 
 	// Создаём gRPC клиент для файлового сервиса
-	fmt.Printf("FILE SERVICE CONNECT: %s:%d\n", cfg.FileService.Host, cfg.FileService.Port)
-	fileServiceClient, err := fileClient.NewFileServiceClient(cfg.FileService.Host, cfg.FileService.Port)
+	fmt.Printf("Creating File Service client connection to %s:%d...\n", cfg.FileService.Host, cfg.FileService.Port)
+	var fileServiceClient fileClient.FileServiceClient
+	realClient, err := fileClient.NewFileServiceClient(cfg.FileService.Host, cfg.FileService.Port)
 	if err != nil {
-		logBase.Info(ctx, "Failed to create file service client, continuing without file service", zap.Error(err))
-		fileServiceClient = nil
+		fmt.Printf("⚠Failed to create file service client, using mock client for testing: %v\n", err)
+		logBase.Info(ctx, "Failed to create file service client, using mock client for testing", zap.Error(err))
+
+		// Используем mock клиент для тестирования
+		// В продакшене здесь можно установить fileServiceClient = nil, чтобы регистрация не работала
+		useMock := os.Getenv("USE_MOCK_FILE_SERVICE") == "true"
+		if useMock {
+			fileServiceClient = fileClient.NewMockFileServiceClient(false) // false = не должен падать
+			fmt.Printf("Using mock file service client for testing\n")
+			logBase.Info(ctx, "Using mock file service client for testing")
+		} else {
+			fileServiceClient = nil
+			fmt.Printf("File service is required for registration. Set USE_MOCK_FILE_SERVICE=true for testing.\n")
+			logBase.Info(ctx, "File service is required for registration. Set USE_MOCK_FILE_SERVICE=true for testing.")
+		}
 	} else {
+		fileServiceClient = realClient
+		fmt.Printf("File Service client created successfully\n")
 		logBase.Info(ctx, "File service client created successfully")
 	}
 
 	// Создаём security
+	fmt.Printf("Initializing security service...\n")
 	securityService := security.NewSecurity(
 		cfg.Jwt.SecretKey,
 		cfg.Jwt.Expiration,
 		cfg.Verification.SecretKey,
 		cfg.Verification.Expiration,
 	)
+	fmt.Printf("Security service initialized\n")
 
 	// Создаём сервис пользователей
+	fmt.Printf("Initializing user service...\n")
 	userService := service.NewUserService(userRepo, securityService, fileServiceClient)
+	fmt.Printf("User service initialized\n")
 
 	// Создаём gRPC сервер (фоново, ошибки логируем, но не блокируем HTTP)
+	fmt.Printf("Starting gRPC auth server on port %d...\n", cfg.Grpc.Port)
 	grpcSrv := authServer.NewAuthServer(&ctx, userService, securityService, &cfg.Grpc)
 	go func() {
 		if err := grpcSrv.StartAuthServer(); err != nil {
@@ -97,8 +122,10 @@ func run(ctx context.Context, w io.Writer, args []string) (*http.Server, *logger
 	}()
 
 	// Создаём HTTP хэндлер и роутер
+	fmt.Printf("Setting up HTTP handlers and routes...\n")
 	handler := api.NewHandler(userService)
 	router := api.SetupRoutes(handler)
+	fmt.Printf("HTTP handlers and routes configured\n")
 
 	// HTTP-сервер
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -107,12 +134,18 @@ func run(ctx context.Context, w io.Writer, args []string) (*http.Server, *logger
 		Handler: router,
 	}
 
+	fmt.Printf("Starting HTTP server on %s...\n", addr)
 	logBase.Info(ctx, "Starting auth service", zap.String("http_addr", addr), zap.Int("grpc_port", cfg.Grpc.Port))
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logBase.Error(ctx, "HTTP ListenAndServe failed", zap.Error(err))
 		}
 	}()
+
+	fmt.Printf("Auth service started successfully!\n")
+	fmt.Printf("HTTP Server: http://%s\n", addr)
+	fmt.Printf("gRPC Server: localhost:%d\n", cfg.Grpc.Port)
+	fmt.Println("==================================================")
 
 	return srv, logBase, nil
 }
