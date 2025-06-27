@@ -160,16 +160,16 @@ func parseUUID(id string) uuid.UUID {
 }
 
 func (s *AuthServer) StartAuthServer() error {
-	port := fmt.Sprintf(":%d", s.cfg.Port)
-	fmt.Printf("Starting gRPC Auth Server on port %s...\n", port)
+	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
+	fmt.Printf("Starting gRPC Auth Server on %s...\n", addr)
 
-	listener, err := net.Listen("tcp", port)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		fmt.Printf("Failed to listen on port %s: %v\n", port, err)
+		fmt.Printf("Failed to listen on %s: %v\n", addr, err)
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 
-	fmt.Printf("Successfully listening on port %s\n", port)
+	fmt.Printf("Successfully listening on %s\n", addr)
 
 	// Создаем gRPC сервер
 	grpcServer := grpc.NewServer()
@@ -180,11 +180,11 @@ func (s *AuthServer) StartAuthServer() error {
 	// Включаем reflection для отладки
 	reflection.Register(grpcServer)
 
-	fmt.Printf("Successfully listening on port %s\n", port)
+	fmt.Printf("Successfully listening on %s\n", addr)
 	fmt.Printf("gRPC services registered and reflection enabled\n")
 
 	// Запускаем сервер
-	fmt.Printf("gRPC auth server is now serving on %s\n", port)
+	fmt.Printf("gRPC auth server is now serving on %s\n", addr)
 	if err := grpcServer.Serve(listener); err != nil {
 		fmt.Printf("gRPC server failed to serve: %v\n", err)
 		return fmt.Errorf("failed to serve: %w", err)
